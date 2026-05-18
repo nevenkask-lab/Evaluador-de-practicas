@@ -42,34 +42,41 @@ if uploaded_file is not None and nombre != "":
                     with open("temp_file", "wb") as f:
                         f.write(uploaded_file.getbuffer())
                     
-                    # 3. Subir a Gemini usando el gestor de archivos de la nueva API
+                    # 3. Subir a Gemini usando el gestor de archivos
                     media_file = client_gemini.files.upload(file="temp_file", config={"mime_type": mime_actual})
                     
+                    # --- NUEVO: Esperar a que el archivo esté ACTIVE ---
+                    import time
+                    with tf.spinner("Google está procesando el archivo para la IA..."):
+                        while media_file.state.name == "PROCESSING":
+                            time.sleep(2)  # Espera 2 segundos antes de volver a preguntar
+                            media_file = client_gemini.files.get(name=media_file.name)
+                        
+                        if media_file.state.name == "FAILED":
+                            raise Exception("El procesamiento del archivo falló en los servidores de Google.")
+                    # --------------------------------------------------
+
                     # Instrucciones detalladas para la IA
                     prompt = """
                     Analiza este archivo de un estudiante de guía de turismo. Ofrece una devolución pormenorizada estructurada exactamente con los siguientes títulos en Markdown:
                     
                     ### 📊 Resumen Ejecutivo de la Performance
-                    (Breve introducción de cómo lo hizo)
                     
                     ### 🗣️ 1. Coherencia, Cohesión y Errores del Lenguaje
-                    (Analiza la estructura del discurso, conectores, vocabulario técnico y presencia de muletillas)
                     
                     ### 🎙️ 2. Cualidades de la Voz (Oratoria)
-                    (Analiza minuciosamente: Dicción, Entonación, Ritmo, Pausas, Volumen e Inflexiones)
                     
                     ### 🧍 3. Expresión Corporal y Gestualidad (Si es video)
-                    (Analiza la postura, contacto visual, uso de las manos y expresión facial. Si es solo audio, indica que no aplica)
                     
                     ### 🎯 4. Conclusiones y Plan de Acción de Mejora
-                    (Da 3 consejos prácticos específicos basados en lo observado para que el alumno practique)
                     """
                     
-                    # Llamada al modelo usando la sintaxis actualizada (gemini-2.5-flash es el estándar actual rápido y gratuito)
-                    response = client_gemini.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=[media_file, prompt]
-                    )
+                    # Llamada al modelo ahora que el archivo está ACTIVE
+                    with tf.spinner("Analizando performance minuciosamente..."):
+                        response = client_gemini.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=[media_file, prompt]
+                        )
                     
                     # MOSTRAR EN PANTALLA
                     tf.success(f"¡Evaluación de {nombre} completada!")

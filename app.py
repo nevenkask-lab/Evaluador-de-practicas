@@ -45,16 +45,23 @@ if uploaded_file is not None and nombre != "":
                     # 3. Subir a Gemini usando el gestor de archivos
                     media_file = client_gemini.files.upload(file="temp_file", config={"mime_type": mime_actual})
                     
-                    # --- NUEVO: Esperar a que el archivo esté ACTIVE ---
-                    import time
-                    with tf.spinner("Google está procesando el archivo para la IA..."):
-                        while media_file.state.name == "PROCESSING":
-                            time.sleep(2)  # Espera 2 segundos antes de volver a preguntar
-                            media_file = client_gemini.files.get(name=media_file.name)
-                        
-                        if media_file.state.name == "FAILED":
-                            raise Exception("El procesamiento del archivo falló en los servidores de Google.")
-                    # --------------------------------------------------
+                    # --- NUEVO: Llamada al modelo con lógica de reintento automático ---
+                    with tf.spinner("Analizando performance minuciosamente..."):
+                        max_intentos = 3
+                        for intento in range(max_intentos):
+                            try:
+                                response = client_gemini.models.generate_content(
+                                    model='gemini-2.5-flash',
+                                    contents=[media_file, prompt]
+                                )
+                                break # Si funciona, sale del bucle de reintentos
+                            except Exception as e:
+                                if "503" in str(e) or "UNAVAILABLE" in str(e).upper():
+                                    if intento < max_intentos - 1:
+                                        time.sleep(3) # Espera 3 segundos si el servidor está saturado
+                                        continue
+                                raise e # Si no es un error 503 o ya superó los intentos, lanza el error
+                    # ------------------------------------------------------------------
 
                     # Instrucciones detalladas para la IA
                     prompt = """
